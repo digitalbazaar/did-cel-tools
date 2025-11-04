@@ -1,0 +1,24 @@
+{
+  "name": "didcel",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./lib/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": {
+    "name": "Digital Bazaar, Inc.",
+    "url": "https://digitalbazaar.com/"
+  },
+  "contributors": [
+    "Manu Sporny <msporny@digitalbazaar.com> (https://manu.sporny.org/)"
+  ],
+  "license": "BSD",
+  "description": "",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "prompt-sync": "^4.2.0"
+  }
+}
