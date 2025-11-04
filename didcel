@@ -2,12 +2,8 @@
 import { Argument, Command, CommanderError } from 'commander';
 import path from 'path';
 import promptSync from 'prompt-sync';
-// import {
-//   createLog, addEvent, witnessEvent,
-// } from './lib/cel.js';
-// import {
-//   create, read, update, deactivate
-// } from './lib/did-cel-driver.js';
+import cel from './lib/cel.js';
+import didcel from './lib/didcel.js';
 
 // create the CLI and parse the options
 const program = new Command();
@@ -21,6 +17,9 @@ async function repl({commands}) {
   // configure the REPL
   const prompt = promptSync();
   const repl = new Command();
+  let log;
+  let didDocument;
+
   repl.name('command')
     .usage('[options]')
     .exitOverride();
@@ -29,13 +28,21 @@ async function repl({commands}) {
     .description('Show help')
     .action(() => {
       repl.help();
-  });
+    });
+
+  repl.command('load')
+    .description('Load a DID from a cryptographic event log.')
+    .action(() => {
+      console.error('load not implemented');
+    });
 
   repl.command('create')
     .description('Create a new DID document')
     .action(() => {
-      console.error('create not implemented');
-  });
+      didDocument = didcel.create({});
+      log = cel.create({data: didDocument});
+      console.log('CEL: ', JSON.stringify(log, null, 2));
+    });
 
   repl.command('add')
     .description('Add a verification method or service to the current DID document.')
@@ -45,21 +52,21 @@ async function repl({commands}) {
       .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
     .action(() => {
       console.error('add not implemented');
-  });
+    });
 
   repl.command('expire')
     .description('Expire a verification method from the current DID document.')
     .argument('<id>', 'the id of the verification method to expire')
     .action(() => {
       console.error('expire not implemented');
-  });
+    });
 
   repl.command('remove')
     .description('Remove an object from the current DID document.')
     .argument('<id>', 'the id of the object to remove')
     .action(() => {
       console.error('remove not implemented');
-  });
+    });
 
   repl.command('save')
     .description(
