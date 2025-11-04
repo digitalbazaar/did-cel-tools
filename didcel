@@ -12,7 +12,7 @@ program
   .parse(process.argv);
 const options = program.opts();
 
-// Run the repl
+// Runs the repl until exit
 async function repl({commands}) {
   // configure the REPL
   const prompt = promptSync();
@@ -50,8 +50,18 @@ async function repl({commands}) {
       .choices(['authentication', 'assertionMethod', 'capabilityDelegation', 'capabilityInvocation', 'keyAgreement', 'service']))
     .addArgument(new Argument('<type>', 'the type of property to add')
       .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
-    .action(() => {
-      console.error('add not implemented');
+    .action((property, type) => {
+      if(property !== 'service' && type === 'ecdsa') {
+        const vm = {
+          id: '#zDnYeGRG5ehnPAmxcf5mDZpvaerx9CtbPJ1q36T5Ln5wYt3MQ',
+          type: 'Multikey',
+          controller: didDocument.id,
+          publicKeyMultibase: 'zDnYeGRG5ehnPAmxcf5mDZpvaerx9CtbPJ1q36T5Ln5wYt3MQ'
+        };
+        didDocument.verificationMethod.push(vm);
+        didDocument[property].push(vm.id);
+      }
+      console.log(`add ${property} ${type}: `, JSON.stringify(didDocument, null, 2));
     });
 
   repl.command('expire')
@@ -66,6 +76,13 @@ async function repl({commands}) {
     .argument('<id>', 'the id of the object to remove')
     .action(() => {
       console.error('remove not implemented');
+    });
+
+  repl.command('witness')
+    .description(
+      'Witness the latest set of updates to the DID document.')
+    .action(async () => {
+      console.error('witnessing not implemented');
     });
 
   repl.command('save')
