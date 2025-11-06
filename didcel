@@ -4,6 +4,7 @@ import cel from './lib/cel.js';
 import didcel from './lib/didcel.js';
 import promptSync from 'prompt-sync';
 import {writeFileSync} from 'fs';
+import {createJsonldPrettyPrinter} from './lib/utils.js';
 
 // create the CLI and parse the options
 const program = new Command();
@@ -12,6 +13,10 @@ program
   .option('-v, --verbose', 'Provide verbose output')
   .parse(process.argv);
 const options = program.opts();
+
+const jsonldPretty = createJsonldPrettyPrinter({
+  preferOrder: ['@context',  '@id', '@type', 'id', 'type', 'cryptosuite']
+});
 
 // Runs the repl until exit
 async function repl({commands}) {
@@ -84,7 +89,8 @@ async function repl({commands}) {
     .description(
       'Witness the latest set of updates to the DID document.')
     .action(async () => {
-      console.error('witnessing not implemented');
+      const proof = await cel.witness({cel: cryptographicEventLog})
+      console.log('Generated witness proofs:', JSON.stringify(proof, null, 2));
     });
 
   repl.command('save')
@@ -93,7 +99,7 @@ async function repl({commands}) {
     .argument('[filename]', 'the name of the file to save the event log to')
     .action(async (filename) => {
       const celFilename = filename || 'did.cel';
-      writeFileSync(celFilename, JSON.stringify(cryptographicEventLog, null, 2));
+      writeFileSync(celFilename, JSON.stringify(cryptographicEventLog, jsonldPretty, 2));
       console.error(`Wrote to ${celFilename}`);
     });
 
