@@ -14,8 +14,10 @@ program
   .parse(process.argv);
 const options = program.opts();
 
+// create the JSON-LD pretty printer
 const jsonldPretty = createJsonldPrettyPrinter({
-  preferOrder: ['@context',  '@id', '@type', 'id', 'type', 'cryptosuite']
+  preferOrder: ['@context',  '@id', '@type', 'id', 'type', 'cryptosuite',
+    'previousEvent']
 });
 
 // Runs the repl until exit
@@ -25,6 +27,13 @@ async function repl({commands}) {
   const repl = new Command();
   let cryptographicEventLog;
   let didDocument;
+  let secretKeys = {
+    authentication: [],
+    assertionMethod: [],
+    capabilityInvocation: [],
+    capabilityDelegation: [],
+    keyAgreement: []
+  };
 
   repl.name('command')
     .usage('[options]')
@@ -47,8 +56,9 @@ async function repl({commands}) {
     .action(async () => {
       let result = await didcel.create({curve: 'P-256'});
       didDocument = result.didDocument;
+      secretKeys.assertionMethod = [result.keyPair];
       cryptographicEventLog = cel.create({data: didDocument});
-      console.log('CEL: ', JSON.stringify(cryptographicEventLog, null, 2));
+      console.log(`create successful: ${didDocument.id}`);
     });
 
   repl.command('add')
@@ -57,18 +67,14 @@ async function repl({commands}) {
       .choices(['authentication', 'assertionMethod', 'capabilityDelegation', 'capabilityInvocation', 'keyAgreement', 'service']))
     .addArgument(new Argument('<type>', 'the type of property to add')
       .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
-    .action((property, type) => {
+    .action(async (property, type) => {
       if(property !== 'service' && type === 'ecdsa') {
-        const vm = {
-          id: '#zDnYeGRG5ehnPAmxcf5mDZpvaerx9CtbPJ1q36T5Ln5wYt3MQ',
-          type: 'Multikey',
-          controller: didDocument.id,
-          publicKeyMultibase: 'zDnYeGRG5ehnPAmxcf5mDZpvaerx9CtbPJ1q36T5Ln5wYt3MQ'
-        };
-        didDocument.verificationMethod.push(vm);
-        didDocument[property].push(vm.id);
+        let result = await didcel.addVm(
+          {didDocument, verificationRelationship: property, curve: 'P-256'});
+        didDocument = result.didDocument;
+        secretKeys[property].push(result.keyPair);
+        console.log(`added new verification method for ${property}`);
       }
-      console.log(`add ${property} ${type}: `, JSON.stringify(didDocument, null, 2));
     });
 
   repl.command('expire')
@@ -85,12 +91,21 @@ async function repl({commands}) {
       console.error('remove not implemented');
     });
 
+  repl.command('update')
+    .description('Update the cryptographic event log with the latest DID document')
+    .action(async () => {
+      didDocument = await didcel.updateProof({
+        didDocument, assertionMethod: secretKeys.assertionMethod[0]});
+      cryptographicEventLog =
+        await cel.update({cel: cryptographicEventLog, data: didDocument});
+    });
+
   repl.command('witness')
     .description(
       'Witness the latest set of updates to the DID document.')
     .action(async () => {
       const proof = await cel.witness({cel: cryptographicEventLog})
-      console.log('Generated witness proofs:', JSON.stringify(proof, null, 2));
+      console.log('witness: proofs complete');
     });
 
   repl.command('save')
