@@ -94,8 +94,8 @@ async function repl({commands}) {
   repl.command('update')
     .description('Update the cryptographic event log with the latest DID document')
     .action(async () => {
-      didDocument = await didcel.updateProof({
-        didDocument, assertionMethod: secretKeys.assertionMethod[0]});
+      didDocument = (await didcel.updateProof({didDocument,
+        assertionMethod: secretKeys.assertionMethod[0]})).didDocument;
       cryptographicEventLog =
         await cel.update({cel: cryptographicEventLog, data: didDocument});
     });
