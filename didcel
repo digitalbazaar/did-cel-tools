@@ -4,7 +4,8 @@ import cel from './lib/cel.js';
 import didcel from './lib/didcel.js';
 import promptSync from 'prompt-sync';
 import {writeFileSync} from 'fs';
-import {createJsonldPrettyPrinter, getObjectByIdSuffix} from './lib/utils.js';
+import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
+  getObjectByIdSuffix} from './lib/utils.js';
 
 // create the CLI and parse the options
 const program = new Command();
@@ -76,7 +77,7 @@ async function repl({commands}) {
           {didDocument, verificationRelationship: property, curve: 'P-256'});
         didDocument = result.didDocument;
         secretKeys[property].push(result.keyPair);
-        console.log(`added new verification method for ${property}`);
+        console.log(`add: new verification method for ${property}`);
       }
     });
 
@@ -122,7 +123,6 @@ async function repl({commands}) {
     .description('Expire a verification method from the current DID document.')
     .addArgument(new Argument('<suffix>', 'the last several characters of the identifier to expire'))
     .action(async (suffix) => {
-      // print detailed object if suffix was provided
       if(suffix) {
         const value = getObjectByIdSuffix({didDocument, suffix});
         if(value) {
@@ -135,14 +135,20 @@ async function repl({commands}) {
           console.log(`error: Could not find object with suffix "${suffix}".`);
         }
       }
-
     });
 
   repl.command('remove')
     .description('Remove an object from the current DID document.')
-    .argument('<id>', 'the id of the object to remove')
-    .action(() => {
-      console.error('remove not implemented');
+    .addArgument(new Argument('<suffix>', 'the last several characters of the identifier to remove'))
+    .action(async (suffix) => {
+      if(suffix) {
+        const value = deleteObjectByIdSuffix({didDocument, suffix});
+        if(value) {
+          console.log(`remove: removed ${value.id} successfully.`);
+        } else {
+          console.log(`error: Could not find object with suffix "${suffix}".`);
+        }
+      }
     });
 
   repl.command('update')
