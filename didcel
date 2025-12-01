@@ -120,9 +120,22 @@ async function repl({commands}) {
 
   repl.command('expire')
     .description('Expire a verification method from the current DID document.')
-    .argument('<id>', 'the id of the verification method to expire')
-    .action(() => {
-      console.error('expire not implemented');
+    .addArgument(new Argument('<suffix>', 'the last several characters of the identifier to expire'))
+    .action(async (suffix) => {
+      // print detailed object if suffix was provided
+      if(suffix) {
+        const value = getObjectByIdSuffix({didDocument, suffix});
+        if(value) {
+          let expireDatetime = new Date().toISOString();
+          expireDatetime =
+            expireDatetime.slice(0, expireDatetime.length - 5) + 'Z';
+          value.expires = expireDatetime;
+          console.log(`expire: ${value.id} at ${expireDatetime}.`);
+        } else {
+          console.log(`error: Could not find object with suffix "${suffix}".`);
+        }
+      }
+
     });
 
   repl.command('remove')
