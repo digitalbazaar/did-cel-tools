@@ -20,6 +20,9 @@ const jsonldPretty = createJsonldPrettyPrinter({
     'previousEvent']
 });
 
+// common properties for a DID Document
+const COMMON_PROPERTIES = ['authentication', 'assertionMethod', 'capabilityDelegation', 'capabilityInvocation', 'keyAgreement', 'service'];
+
 // Runs the repl until exit
 async function repl({commands}) {
   // configure the REPL
@@ -64,7 +67,7 @@ async function repl({commands}) {
   repl.command('add')
     .description('Add a verification method or service to the current DID document.')
     .addArgument(new Argument('<property>', 'the name of the property to add to')
-      .choices(['authentication', 'assertionMethod', 'capabilityDelegation', 'capabilityInvocation', 'keyAgreement', 'service']))
+      .choices(COMMON_PROPERTIES))
     .addArgument(new Argument('<type>', 'the type of property to add')
       .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
     .action(async (property, type) => {
@@ -74,6 +77,43 @@ async function repl({commands}) {
         didDocument = result.didDocument;
         secretKeys[property].push(result.keyPair);
         console.log(`added new verification method for ${property}`);
+      }
+    });
+
+  repl.command('ls')
+    .description('list the contents of all identifiers, or a specific one.')
+    .addArgument(new Argument('[id]', 'the identifier to list'))
+    .action(async (id) => {
+      console.log(didDocument.id);
+      for(let property of COMMON_PROPERTIES) {
+        if(didDocument[property]) {
+          let propertyListing = '';
+          for(let entry of didDocument[property]) {
+            const lastFourOfId =
+              entry.id.slice(entry.id.length - 4, entry.id.length);
+            // if an id was supplied, print out the entry and continue
+            if(id === lastFourOfId) {
+              propertyListing =
+                `  ${property}: ` + JSON.stringify(entry, jsonldPretty, 4);
+              console.log(propertyListing);
+              return;
+            }
+
+            // if an id was not supplied, summarize the identifier
+            if(id === undefined) {
+              if(propertyListing.length < 1) {
+                propertyListing = `  ${property}: `;
+              }
+              if(entry.type === 'Multikey') {
+                propertyListing +=
+                  entry.id.slice(0, 4) + '...' + lastFourOfId + ' ';
+              }
+            }
+          }
+          if(propertyListing.length > 0) {
+            console.log(propertyListing);
+          }
+        }
       }
     });
 
@@ -138,8 +178,6 @@ async function repl({commands}) {
         }
       }
     };
-
-    process.exit(0);
   }
 
   // if no command line commands were given, run the repl
