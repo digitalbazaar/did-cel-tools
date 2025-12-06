@@ -232,7 +232,8 @@ async function repl({commands}) {
     .action(async () => {
       // step 1: Regenerate the cryptographic proof on the DID document
       // this signs the current state of the DID document
-      const result = await didcel.createEvent({data: didDocument,
+      const result = await didcel.createEvent({
+        data: didDocument, type: 'update',
         assertionMethod: secretKeys.assertionMethod[0]});
       const event = result.event;
 
@@ -240,6 +241,42 @@ async function repl({commands}) {
       // this creates a hash-linked chain entry with the modified DID document
       cryptographicEventLog =
         await cel.addEvent({cel: cryptographicEventLog, event});
+    });
+
+  // command: heartbeat
+  // generates a heartbeat to ensure the DID Document does not deactivate
+  repl.command('heartbeat')
+    .description('Update the cryptographic event log with a heartbeat')
+    .action(async () => {
+      // step 1: Create a heartbeat event
+      const result = await didcel.createEvent({
+        data: undefined, type: 'heartbeat',
+        assertionMethod: secretKeys.assertionMethod[0]});
+      const event = result.event;
+
+      // step 2: Append an heatbeat event to the CEL
+      // this creates a hash-linked chain entry with the heatbeat event
+      cryptographicEventLog =
+        await cel.addEvent({cel: cryptographicEventLog, event});
+      console.log('heartbeat: generated');
+    });
+
+  // command: deactivate
+  // Deactivates the DID
+  repl.command('deactivate')
+    .description('Deactivate the DID')
+    .action(async () => {
+      // step 1: Create the deactivation event
+      const result = await didcel.createEvent({
+        data: undefined, type: 'deactivate',
+        assertionMethod: secretKeys.assertionMethod[0]});
+      const event = result.event;
+
+      // step 2: Append the deactivation event to the CEL
+      // this creates a hash-linked chain entry with the deactivation event
+      cryptographicEventLog =
+        await cel.addEvent({cel: cryptographicEventLog, event});
+      console.log('deactivation: complete');
     });
 
   // command: witness
