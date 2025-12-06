@@ -1,6 +1,6 @@
 # DID CEL Tools
 
-A command-line tool for creating and managing Decentralized Identifiers (DIDs) using the Certificate Event Log (CEL) method. This tool provides an interactive REPL (Read-Eval-Print Loop) for working with `did:cel` identifiers, which use a witness-based architecture to maintain a cryptographically verifiable history of DID document operations.
+A command-line tool for creating and managing Decentralized Identifiers (DIDs) using the Cryptographic Event Log (CEL) method. This tool provides an interactive REPL (Read-Eval-Print Loop) for working with `did:cel` identifiers, which use a witness-based architecture to maintain a cryptographically verifiable history of DID document operations.
 
 The `did:cel` method is a fully decentralized DID method that doesn't depend on blockchains, centralized registries, or any single point of control. Instead, it uses cryptographic event logs with independent witness attestations to create tamper-evident audit trails for DID operations.
 

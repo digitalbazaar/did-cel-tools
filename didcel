@@ -3,7 +3,7 @@
  * @fileoverview DID CEL Command Line Interface (CLI)
  *
  * This is an interactive REPL (Read-Eval-Print Loop) for creating and managing
- * DID documents using the Certificate Event Log (CEL) method. The tool allows
+ * DID documents using the Cryptographic Event Log (CEL) method. The tool allows
  * users to create DIDs, add/remove verification methods, update DID documents,
  * and maintain a cryptographic event log of all changes.
  *
@@ -106,7 +106,7 @@ async function repl({commands}) {
       didDocument = result.didDocument;
       // store the secret key for future signing operations
       secretKeys.assertionMethod = [result.keyPair];
-      // initialize the Certificate Event Log with the create event
+      // initialize the Cryptographic Event Log with the create event
       cryptographicEventLog = cel.create({event: result.event});
       console.log(`create successful: ${didDocument.id}`);
     });
@@ -222,7 +222,7 @@ async function repl({commands}) {
 
   // command: update
   // updates the cryptographic proof on the DID document and appends an update
-  // event to the Certificate Event Log. This creates a new entry in the log
+  // event to the Cryptographic Event Log. This creates a new entry in the log
   // that is hash-linked to the previous event, forming a verifiable chain. The
   // proof is signed using the first assertionMethod key generated during
   // create. After running update, you should run 'witness' to get witness
@@ -260,7 +260,7 @@ async function repl({commands}) {
     });
 
   // command: save
-  // persists the Certificate Event Log to a file. The CEL contains the complete
+  // persists the Cryptographic Event Log to a file. The CEL contains the complete
   // history of all operations on the DID document, including create and update
   // events, along with witness attestations. The file is saved in JSON format
   // with keys ordered for readability (e.g., @context, id, type first).
