@@ -31,6 +31,7 @@ import didcel from './lib/didcel.js';
 import promptSync from 'prompt-sync';
 import {mkdirSync, writeFileSync} from 'fs';
 import {join} from 'node:path';
+import {saveSecrets} from './lib/secrets.js';
 import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
   getObjectByIdSuffix} from './lib/utils.js';
 
@@ -38,6 +39,7 @@ import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
 const program = new Command();
 program
   .option('-c, --command <command...>', 'One or more commands to execute')
+  .option('-p, --password <password>', 'Password for encrypting private keys')
   .option('-v, --verbose', 'Provide verbose output')
   .parse(process.argv);
 const options = program.opts();
@@ -61,10 +63,15 @@ const COMMON_PROPERTIES = ['authentication', 'assertionMethod', 'capabilityDeleg
  *   execute before entering interactive mode.
  * @returns {Promise<void>}
  */
-async function repl({commands}) {
+async function repl({commands, password}) {
   // configure the REPL environment
   const prompt = promptSync();
   const repl = new Command();
+
+  // prompt for encryption password if not provided via -p
+  if(!password) {
+    password = prompt('Encryption password: ', {echo: ''});
+  }
 
   // session state variables
   // the CEL tracking all DID changes
@@ -308,19 +315,22 @@ async function repl({commands}) {
       'Saves the current DID to a cryptographic event log.')
     .argument('[filename]', 'the name of the file to save the event log to')
     .action(async (filename) => {
+      const didIdentifier = didDocument.id.split(':').pop();
       const celJson = JSON.stringify(cryptographicEventLog, jsonldPretty, 2);
 
       // always write to configured logs directory using DID identifier as filename
       if(config.logs) {
         mkdirSync(config.logs, {recursive: true});
-        // use the method-specific identifier (part after did:cel:) as filename
-        const didIdentifier = didDocument.id.split(':').pop();
         const logsPath = join(config.logs, `${didIdentifier}.cel`);
         writeFileSync(logsPath, celJson);
         console.error(`Wrote to ${logsPath}`);
       }
 
-      // also write to explicit filename if provided
+      // save encrypted private keys to secrets directory
+      await saveSecrets({didIdentifier, secretKeys, password});
+      console.error(`Wrote secrets to ${join(config.secrets, `${didIdentifier}.yaml`)}`);
+
+      // also write CEL to explicit filename if provided
       if(filename) {
         writeFileSync(filename, celJson);
         console.error(`Wrote to ${filename}`);
@@ -389,5 +399,6 @@ async function repl({commands}) {
 // entry point: Start the REPL with any command-line options
 // the function is called with commands from the -c flag if provided
 await repl({
-  commands: options.command
+  commands: options.command,
+  password: options.password
 });
