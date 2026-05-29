@@ -33,7 +33,7 @@ import cel from './lib/cel.js';
 import didcel from './lib/didcel.js';
 import {join} from 'node:path';
 import promptSync from 'prompt-sync';
-import {saveSecrets} from './lib/secrets.js';
+import {loadSecrets, saveSecrets} from './lib/secrets.js';
 
 // create the CLI and parse command-line options
 const program = new Command();
@@ -107,9 +107,28 @@ async function repl({commands, password}) {
     });
 
   repl.command('load')
-    .description('Load a DID from a cryptographic event log.')
-    .action(() => {
-      console.error('load not implemented');
+    .description('Load and validate a DID from a cryptographic event log.')
+    .argument('<filename>', 'path to the .cel file to load')
+    .action(async filename => {
+      try {
+        const result = await cel.load({filename});
+        if(result.valid) {
+          didDocument = result.didDocument;
+          cryptographicEventLog = result.cel;
+          const didIdentifier = didDocument.id.split(':').pop();
+          const loaded = await loadSecrets({didIdentifier, password});
+          Object.assign(secretKeys, loaded);
+          const {log} = result.cel;
+          console.log(
+            `load: valid CEL with ${log.length} event(s): ${didDocument.id}`);
+        } else {
+          for(const err of result.errors) {
+            console.log(`error: ${err}`);
+          }
+        }
+      } catch(err) {
+        console.log(`error: ${err.message}`);
+      }
     });
 
   // command: create
