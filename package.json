@@ -1,10 +1,10 @@
 {
-  "name": "didcel",
+  "name": "did-cel-tools",
   "version": "0.0.1",
   "type": "module",
-  "main": "./lib/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "eslint .",
+    "test": "mocha"
   },
   "keywords": [],
   "author": {
@@ -18,7 +18,17 @@
   "description": "",
   "dependencies": {
     "commander": "^12.1.0",
+    "didcel": "github:digitalbazaar/didcel#initial",
     "dotenv": "^16.4.5",
+    "js-yaml": "^4.1.0",
     "prompt-sync": "^4.2.0"
+  },
+  "devDependencies": {
+    "@bedrock/test": "^8.2.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.1",
+    "eslint-config-digitalbazaar": "^5.2.0",
+    "eslint-plugin-jsdoc": "^50.6.8",
+    "eslint-plugin-unicorn": "^56.0.1"
   }
 }
