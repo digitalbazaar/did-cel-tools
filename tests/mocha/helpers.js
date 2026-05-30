@@ -14,7 +14,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const TESTS_DIR = path.resolve(__dirname, '..');
 export const ROOT_DIR = path.resolve(TESTS_DIR, '..');
 export const TMP_DIR = join(TESTS_DIR, 'tmp');
-export const CONFIG_PATH = join(TESTS_DIR, 'config.yaml');
+// config.yaml is written dynamically by 00-setup.js with the mock witness URL
+export const CONFIG_PATH = join(TMP_DIR, 'config.yaml');
 export const DIDCEL_PATH = join(ROOT_DIR, 'didcel');
 
 export const TEST_PASSWORD = 'test-password-for-automated-tests';

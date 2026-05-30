@@ -26,14 +26,15 @@
 
 import {Argument, Command, CommanderError} from 'commander';
 import {config, loadConfig} from './lib/config.js';
-import {createJsonldPrettyPrinter, deleteObjectByIdSuffix,
-  getObjectByIdSuffix} from './lib/utils.js';
+import {
+  addEvent, createCel, load, witness,
+  addVm, create, createEvent,
+  loadSecrets, saveSecrets,
+  createJsonldPrettyPrinter, deleteObjectByIdSuffix, getObjectByIdSuffix
+} from 'didcel';
 import {mkdirSync, writeFileSync} from 'fs';
-import cel from './lib/cel.js';
-import didcel from './lib/didcel.js';
 import {join} from 'node:path';
 import promptSync from 'prompt-sync';
-import {loadSecrets, saveSecrets} from './lib/secrets.js';
 
 // create the CLI and parse command-line options
 const program = new Command();
@@ -111,12 +112,13 @@ async function repl({commands, password}) {
     .argument('<filename>', 'path to the .cel file to load')
     .action(async filename => {
       try {
-        const result = await cel.load({filename});
+        const result = await load({filename});
         if(result.valid) {
           didDocument = result.didDocument;
           cryptographicEventLog = result.cel;
           const didIdentifier = didDocument.id.split(':').pop();
-          const loaded = await loadSecrets({didIdentifier, password});
+          const loaded = await loadSecrets(
+            {didIdentifier, password, secretsDir: config.secrets});
           Object.assign(secretKeys, loaded);
           const {log} = result.cel;
           console.log(
@@ -137,12 +139,12 @@ async function repl({commands, password}) {
     .description('Create a new DID document')
     .action(async () => {
       // generate a new DID document with P-256 elliptic curve key
-      const result = await didcel.create({curve: 'P-256'});
+      const result = await create({curve: 'P-256'});
       didDocument = result.didDocument;
       // store the secret key for future signing operations
       secretKeys.assertionMethod = [result.keyPair];
       // initialize the Cryptographic Event Log with the create event
-      cryptographicEventLog = cel.create({event: result.event});
+      cryptographicEventLog = createCel({event: result.event});
       console.log(`create successful: ${didDocument.id}`);
     });
 
@@ -158,7 +160,7 @@ async function repl({commands, password}) {
       // TODO: Currently only ECDSA verification methods are supported
       if(property !== 'service' && type === 'ecdsa') {
         // generate a new verification method for the specified relationship
-        const result = await didcel.addVm(
+        const result = await addVm(
           {didDocument, verificationRelationship: property, curve: 'P-256'});
         didDocument = result.didDocument;
         // store the secret key for this verification relationship
@@ -270,7 +272,7 @@ async function repl({commands, password}) {
     .action(async () => {
       // step 1: Regenerate the cryptographic proof on the DID document
       // this signs the current state of the DID document
-      const result = await didcel.createEvent({
+      const result = await createEvent({
         data: didDocument, type: 'update',
         assertionMethod: secretKeys.assertionMethod[0]});
       const event = result.event;
@@ -278,7 +280,7 @@ async function repl({commands, password}) {
       // step 2: Append an update event to the CEL
       // this creates a hash-linked chain entry with the modified DID document
       cryptographicEventLog =
-        await cel.addEvent({cel: cryptographicEventLog, event});
+        await addEvent({cel: cryptographicEventLog, event});
     });
 
   // command: heartbeat
@@ -287,7 +289,7 @@ async function repl({commands, password}) {
     .description('Update the cryptographic event log with a heartbeat')
     .action(async () => {
       // step 1: Create a heartbeat event
-      const result = await didcel.createEvent({
+      const result = await createEvent({
         data: undefined, type: 'heartbeat',
         assertionMethod: secretKeys.assertionMethod[0]});
       const event = result.event;
@@ -295,7 +297,7 @@ async function repl({commands, password}) {
       // step 2: Append an heatbeat event to the CEL
       // this creates a hash-linked chain entry with the heatbeat event
       cryptographicEventLog =
-        await cel.addEvent({cel: cryptographicEventLog, event});
+        await addEvent({cel: cryptographicEventLog, event});
       console.log('heartbeat: generated');
     });
 
@@ -305,7 +307,7 @@ async function repl({commands, password}) {
     .description('Deactivate the DID')
     .action(async () => {
       // step 1: Create the deactivation event
-      const result = await didcel.createEvent({
+      const result = await createEvent({
         data: undefined, type: 'deactivate',
         assertionMethod: secretKeys.assertionMethod[0]});
       const event = result.event;
@@ -313,7 +315,7 @@ async function repl({commands, password}) {
       // step 2: Append the deactivation event to the CEL
       // this creates a hash-linked chain entry with the deactivation event
       cryptographicEventLog =
-        await cel.addEvent({cel: cryptographicEventLog, event});
+        await addEvent({cel: cryptographicEventLog, event});
       console.log('deactivation: complete');
     });
 
@@ -329,7 +331,7 @@ async function repl({commands, password}) {
     .action(async () => {
       // generate witness proofs for the most recent event in the log
       // each witness independently validates and signs the event
-      await cel.witness({cel: cryptographicEventLog});
+      await witness({cel: cryptographicEventLog, witnesses: config.witnesses});
       console.log('witness: proofs complete');
     });
 
@@ -356,7 +358,8 @@ async function repl({commands, password}) {
       }
 
       // save encrypted private keys to secrets directory
-      await saveSecrets({didIdentifier, secretKeys, password});
+      await saveSecrets(
+        {didIdentifier, secretKeys, password, secretsDir: config.secrets});
       const secretsPath = join(config.secrets, `${didIdentifier}.yaml`);
       console.error(`Wrote secrets to ${secretsPath}`);
 

@@ -1,8 +1,7 @@
 {
-  "name": "didcel",
+  "name": "did-cel-tools",
   "version": "0.0.1",
   "type": "module",
-  "main": "./lib/index.js",
   "scripts": {
     "lint": "eslint .",
     "test": "mocha"
@@ -18,15 +17,10 @@
   "license": "BSD",
   "description": "",
   "dependencies": {
-    "@digitalbazaar/data-integrity": "^2.5.0",
-    "@digitalbazaar/ecdsa-jcs-2019-cryptosuite": "^1.0.0",
-    "@noble/hashes": "^2.0.1",
-    "canonicalize": "^2.1.0",
     "commander": "^12.1.0",
+    "didcel": "github:digitalbazaar/didcel#initial",
     "dotenv": "^16.4.5",
-    "jsonld-document-loader": "^2.3.0",
-    "multiformats": "^13.4.1",
-    "node-fetch": "^3.3.2",
+    "js-yaml": "^4.1.0",
     "prompt-sync": "^4.2.0"
   },
   "devDependencies": {
