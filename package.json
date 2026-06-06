@@ -19,7 +19,6 @@
   "dependencies": {
     "commander": "^12.1.0",
     "didcel": "github:digitalbazaar/didcel#initial",
-    "dotenv": "^16.4.5",
     "js-yaml": "^4.1.0",
     "prompt-sync": "^4.2.0"
   },
