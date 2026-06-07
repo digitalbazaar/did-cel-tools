@@ -2,19 +2,11 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  listCelFiles, runDidcel, TMP_DIR
+  listCelFiles, readCelFile, runAndCapture, runDidcel
 } from './helpers.js';
 import chai from 'chai';
-import {gunzipSync} from 'node:zlib';
-import {join} from 'node:path';
-import {readFileSync} from 'node:fs';
 
 const {expect} = chai;
-
-function readCel(filename) {
-  return JSON.parse(
-    gunzipSync(readFileSync(join(TMP_DIR, 'logs', filename))).toString('utf8'));
-}
 
 const UPDATE_COMMANDS = [
   'create', 'witness',
@@ -22,14 +14,6 @@ const UPDATE_COMMANDS = [
   'update', 'witness',
   'save', 'quit'
 ];
-
-async function runUpdate() {
-  const before = listCelFiles();
-  const result = await runDidcel({commands: UPDATE_COMMANDS});
-  const after = listCelFiles();
-  const newFile = after.find(f => !before.includes(f));
-  return {...result, newFile};
-}
 
 describe('update', function() {
   this.timeout(120000);
@@ -50,22 +34,26 @@ describe('update', function() {
     });
 
   it('should produce a CEL with 2 events (create + update)', async () => {
-    const {exitCode, stderr, newFile} = await runUpdate();
+    const {exitCode, stderr, newFile} = await runAndCapture({
+      commands: UPDATE_COMMANDS
+    });
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = readCel(newFile);
+    const celContent = readCelFile(newFile);
 
     expect(celContent).to.have.property('log');
     expect(celContent.log).to.have.length(2);
   });
 
   it('should hashlink events via previousEventHash', async () => {
-    const {exitCode, stderr, newFile} = await runUpdate();
+    const {exitCode, stderr, newFile} = await runAndCapture({
+      commands: UPDATE_COMMANDS
+    });
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = readCel(newFile);
+    const celContent = readCelFile(newFile);
 
     const updateEntry = celContent.log[1];
     expect(updateEntry.event).to.have.property('previousEventHash');
@@ -75,11 +63,13 @@ describe('update', function() {
 
   it('should include the new authentication key in the update event',
     async () => {
-      const {exitCode, stderr, newFile} = await runUpdate();
+      const {exitCode, stderr, newFile} = await runAndCapture({
+        commands: UPDATE_COMMANDS
+      });
 
       expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-      const celContent = readCel(newFile);
+      const celContent = readCelFile(newFile);
 
       const updateEntry = celContent.log[1];
       const didDoc = updateEntry.event.operation.data;
@@ -89,11 +79,13 @@ describe('update', function() {
     });
 
   it('should witness proofs on both events', async () => {
-    const {exitCode, stderr, newFile} = await runUpdate();
+    const {exitCode, stderr, newFile} = await runAndCapture({
+      commands: UPDATE_COMMANDS
+    });
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = readCel(newFile);
+    const celContent = readCelFile(newFile);
 
     for(const entry of celContent.log) {
       expect(entry).to.have.property('proof');

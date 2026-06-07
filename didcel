@@ -260,75 +260,44 @@ async function repl({commands, password}) {
       }
     });
 
+  // signs an event with the current assertionMethod key and appends it to
+  // the CEL; previousEventHash is set before signing so it is covered by proof
+  async function _appendEvent({type, data}) {
+    const previousEventHash =
+      await getPreviousEventHash({cel: cryptographicEventLog});
+    const {event} = await createEvent({
+      type, data,
+      assertionMethod: secretKeys.assertionMethod[0],
+      previousEventHash
+    });
+    cryptographicEventLog =
+      await addEvent({cel: cryptographicEventLog, event});
+  }
+
   // command: update
-  // updates the cryptographic proof on the DID document and appends an update
-  // event to the Cryptographic Event Log. This creates a new entry in the log
-  // that is hash-linked to the previous event, forming a verifiable chain. The
-  // proof is signed using the first assertionMethod key generated during
-  // create. After running update, you should run 'witness' to get witness
-  // attestations.
+  // appends a signed update event to the CEL with the current DID document
+  // state. hash-linked to the previous event. Run 'witness' afterward.
   repl.command('update')
     .description('Update the cryptographic event log with the latest DID doc')
     .action(async () => {
-      // step 1: Get the hash of the current last event so it can be covered
-      // by the new operation proof before signing
-      const previousEventHash =
-        await getPreviousEventHash({cel: cryptographicEventLog});
-
-      // step 2: Sign the current DID document state; previousEventHash is
-      // included in the event before signing so it is part of the proof
-      const result = await createEvent({
-        data: didDocument, type: 'update',
-        assertionMethod: secretKeys.assertionMethod[0], previousEventHash});
-      const event = result.event;
-
-      // step 3: Append the signed, hash-linked event to the CEL
-      cryptographicEventLog =
-        await addEvent({cel: cryptographicEventLog, event});
+      await _appendEvent({type: 'update', data: didDocument});
     });
 
   // command: heartbeat
-  // generates a heartbeat to ensure the DID Document does not deactivate
+  // generates a heartbeat to ensure the DID document does not deactivate
   repl.command('heartbeat')
     .description('Update the cryptographic event log with a heartbeat')
     .action(async () => {
-      // step 1: Get the hash of the current last event so it can be covered
-      // by the new operation proof before signing
-      const previousEventHash =
-        await getPreviousEventHash({cel: cryptographicEventLog});
-
-      // step 2: Create a heartbeat event with previousEventHash covered by proof
-      const result = await createEvent({
-        data: undefined, type: 'heartbeat',
-        assertionMethod: secretKeys.assertionMethod[0], previousEventHash});
-      const event = result.event;
-
-      // step 3: Append the signed, hash-linked event to the CEL
-      cryptographicEventLog =
-        await addEvent({cel: cryptographicEventLog, event});
+      await _appendEvent({type: 'heartbeat', data: undefined});
       console.log('heartbeat: generated');
     });
 
   // command: deactivate
-  // Deactivates the DID
+  // deactivates the DID; terminal operation, no further events permitted
   repl.command('deactivate')
     .description('Deactivate the DID')
     .action(async () => {
-      // step 1: Get the hash of the current last event so it can be covered
-      // by the new operation proof before signing
-      const previousEventHash =
-        await getPreviousEventHash({cel: cryptographicEventLog});
-
-      // step 2: Create the deactivation event with previousEventHash covered
-      // by the operation proof
-      const result = await createEvent({
-        data: undefined, type: 'deactivate',
-        assertionMethod: secretKeys.assertionMethod[0], previousEventHash});
-      const event = result.event;
-
-      // step 3: Append the signed, hash-linked event to the CEL
-      cryptographicEventLog =
-        await addEvent({cel: cryptographicEventLog, event});
+      await _appendEvent({type: 'deactivate', data: undefined});
       console.log('deactivation: complete');
     });
 

@@ -2,19 +2,11 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 import {
-  listCelFiles, listSecretFiles, runDidcel, TMP_DIR
+  listCelFiles, listSecretFiles, readCelFile, runAndCapture, runDidcel
 } from './helpers.js';
 import chai from 'chai';
-import {gunzipSync} from 'node:zlib';
-import {join} from 'node:path';
-import {readFileSync} from 'node:fs';
 
 const {expect} = chai;
-
-function readCel(filename) {
-  return JSON.parse(
-    gunzipSync(readFileSync(join(TMP_DIR, 'logs', filename))).toString('utf8'));
-}
 
 describe('witness', function() {
   this.timeout(60000);
@@ -37,17 +29,13 @@ describe('witness', function() {
 
   it('should produce a CEL with a witness proof on the create event',
     async () => {
-      const before = listCelFiles();
-
-      const {stderr, exitCode} = await runDidcel({
+      const {exitCode, stderr, newFile} = await runAndCapture({
         commands: ['create', 'witness', 'save', 'quit']
       });
 
       expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-      const after = listCelFiles();
-      const newFile = after.find(f => !before.includes(f));
-      const celContent = readCel(newFile);
+      const celContent = readCelFile(newFile);
 
       expect(celContent).to.have.property('log');
       expect(celContent.log).to.have.length(1);
@@ -63,17 +51,13 @@ describe('witness', function() {
     });
 
   it('should have witness proof with a real verificationMethod', async () => {
-    const before = listCelFiles();
-
-    const {exitCode, stderr} = await runDidcel({
+    const {exitCode, stderr, newFile} = await runAndCapture({
       commands: ['create', 'witness', 'save', 'quit']
     });
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const after = listCelFiles();
-    const newFile = after.find(f => !before.includes(f));
-    const celContent = readCel(newFile);
+    const celContent = readCelFile(newFile);
 
     const proof = celContent.log[0].proof[0];
     // verificationMethod should reference a real did:key (not a placeholder)

@@ -1,9 +1,12 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
-import {existsSync, mkdirSync, readdirSync, rmSync} from 'node:fs';
+import {
+  existsSync, mkdirSync, readdirSync, readFileSync, rmSync
+} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {gunzipSync} from 'node:zlib';
 import {join} from 'node:path';
 import path from 'node:path';
 import {promisify} from 'node:util';
@@ -31,14 +34,26 @@ export function clearTmpDir() {
 }
 
 /**
+ * Reads and decompresses a gzipped CEL file from the test tmp/logs directory.
+ *
+ * @param {string} filename - The filename within tmp/logs to read.
+ * @returns {object} The parsed CEL object.
+ */
+export function readCelFile(filename) {
+  return JSON.parse(
+    gunzipSync(
+      readFileSync(join(TMP_DIR, 'logs', filename))).toString('utf8'));
+}
+
+/**
  * Runs the didcel CLI with the given commands and returns stdout/stderr.
  *
  * @param {object} options - Options.
  * @param {Array<string>} options.commands - Commands to pass via -c flags.
  * @param {string} [options.password] - Encryption password (-p flag).
  * @param {number} [options.timeout] - Timeout in ms (default 120000).
- * @returns {Promise<{stdout: string, stderr: string, exitCode: number}>} -
- *   the output of the command.
+ * @returns {Promise<{stdout: string, stderr: string, exitCode: number}>}
+ *   The output of the command.
  */
 export async function runDidcel({
   commands,
@@ -67,7 +82,24 @@ export async function runDidcel({
 }
 
 /**
- * Lists .cel files in the test tmp/logs directory.
+ * Runs the didcel CLI with the given commands and returns the result along
+ * with the new .cel.gz file that was created during the run.
+ *
+ * @param {object} options - Options.
+ * @param {Array<string>} options.commands - Commands to pass via -c flags.
+ * @param {string} [options.password] - Encryption password (-p flag).
+ * @returns {Promise<object>} Result from runDidcel extended with {newFile}.
+ */
+export async function runAndCapture({commands, password}) {
+  const before = listCelFiles();
+  const result = await runDidcel({commands, password});
+  const after = listCelFiles();
+  const newFile = after.find(f => !before.includes(f));
+  return {...result, newFile};
+}
+
+/**
+ * Lists .cel.gz files in the test tmp/logs directory.
  *
  * @returns {Array<string>} Array of filenames.
  */
