@@ -27,12 +27,12 @@
 import {Argument, Command, CommanderError} from 'commander';
 import {config, loadConfig} from './lib/config.js';
 import {
-  addEvent, createCel, getPreviousEventHash, load, witness,
+  addEvent, createCel, getPreviousEventHash, loadFromFile, saveToFile, witness,
   addVm, create, createEvent,
   loadSecrets, saveSecrets,
   createJsonldPrettyPrinter, deleteObjectByIdSuffix, getObjectByIdSuffix
 } from 'didcel';
-import {mkdirSync, writeFileSync} from 'fs';
+import {mkdirSync} from 'fs';
 import {join} from 'node:path';
 import promptSync from 'prompt-sync';
 
@@ -112,7 +112,7 @@ async function repl({commands, password}) {
     .argument('<filename>', 'path to the .cel file to load')
     .action(async filename => {
       try {
-        const result = await load({filename});
+        const result = await loadFromFile({filename});
         if(result.valid) {
           didDocument = result.didDocument;
           cryptographicEventLog = result.cel;
@@ -143,8 +143,8 @@ async function repl({commands, password}) {
       didDocument = result.didDocument;
       // store the secret key for future signing operations
       secretKeys.assertionMethod = [result.keyPair];
-      // initialize the Cryptographic Event Log with the create event
-      cryptographicEventLog = createCel({event: result.event});
+      // use the CEL returned directly by create()
+      cryptographicEventLog = result.cryptographicEventLog;
       console.log(`create successful: ${didDocument.id}`);
     });
 
@@ -360,13 +360,12 @@ async function repl({commands, password}) {
     .argument('[filename]', 'the name of the file to save the event log to')
     .action(async filename => {
       const didIdentifier = didDocument.id.split(':').pop();
-      const celJson = JSON.stringify(cryptographicEventLog, jsonldPretty, 2);
 
       // always write to configured logs directory using DID identifier
       if(config.logs) {
         mkdirSync(config.logs, {recursive: true});
-        const logsPath = join(config.logs, `${didIdentifier}.cel`);
-        writeFileSync(logsPath, celJson);
+        const logsPath = join(config.logs, `${didIdentifier}.cel.gz`);
+        saveToFile({filename: logsPath, cel: cryptographicEventLog});
         console.error(`Wrote to ${logsPath}`);
       }
 
@@ -378,7 +377,7 @@ async function repl({commands, password}) {
 
       // also write CEL to explicit filename if provided
       if(filename) {
-        writeFileSync(filename, celJson);
+        saveToFile({filename, cel: cryptographicEventLog});
         console.error(`Wrote to ${filename}`);
       }
     });

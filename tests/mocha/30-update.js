@@ -7,6 +7,7 @@ import {
 import chai from 'chai';
 import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
+import {gunzipSync} from 'node:zlib';
 
 const {expect} = chai;
 
@@ -49,7 +50,7 @@ describe('update', function() {
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
     const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
     expect(celContent).to.have.property('log');
     expect(celContent.log).to.have.length(2);
@@ -61,7 +62,7 @@ describe('update', function() {
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
     const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
     const updateEntry = celContent.log[1];
     expect(updateEntry.event).to.have.property('previousEventHash');
@@ -76,7 +77,7 @@ describe('update', function() {
       expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
       const celContent = JSON.parse(
-        readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+        gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
       const updateEntry = celContent.log[1];
       const didDoc = updateEntry.event.operation.data;
@@ -91,7 +92,7 @@ describe('update', function() {
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
     const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
     for(const entry of celContent.log) {
       expect(entry).to.have.property('proof');

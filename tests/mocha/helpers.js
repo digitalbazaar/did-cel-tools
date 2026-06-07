@@ -76,7 +76,7 @@ export function listCelFiles() {
   if(!existsSync(logsDir)) {
     return [];
   }
-  return readdirSync(logsDir).filter(f => f.endsWith('.cel'));
+  return readdirSync(logsDir).filter(f => f.endsWith('.cel.gz'));
 }
 
 /**

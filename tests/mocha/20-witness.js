@@ -7,6 +7,7 @@ import {
 import chai from 'chai';
 import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
+import {gunzipSync} from 'node:zlib';
 
 const {expect} = chai;
 
@@ -42,7 +43,7 @@ describe('witness', function() {
       const after = listCelFiles();
       const newFile = after.find(f => !before.includes(f));
       const celContent = JSON.parse(
-        readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+        gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
       expect(celContent).to.have.property('log');
       expect(celContent.log).to.have.length(1);
@@ -69,7 +70,7 @@ describe('witness', function() {
     const after = listCelFiles();
     const newFile = after.find(f => !before.includes(f));
     const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
     const proof = celContent.log[0].proof[0];
     // verificationMethod should reference a real did:key (not a placeholder)

@@ -7,6 +7,7 @@ import {
 import chai from 'chai';
 import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
+import {gunzipSync} from 'node:zlib';
 
 const {expect} = chai;
 
@@ -42,7 +43,7 @@ describe('heartbeat', function() {
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
     const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
     expect(celContent).to.have.property('log');
     expect(celContent.log).to.have.length(2);
@@ -54,7 +55,7 @@ describe('heartbeat', function() {
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
     const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
     const heartbeatEntry = celContent.log[1];
     expect(heartbeatEntry.event.operation).to.have.property(
@@ -69,7 +70,7 @@ describe('heartbeat', function() {
       expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
       const celContent = JSON.parse(
-        readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+        gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
       const heartbeatEntry = celContent.log[1];
       expect(heartbeatEntry.event).to.have.property('previousEventHash');
@@ -82,7 +83,7 @@ describe('heartbeat', function() {
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
     const celContent = JSON.parse(
-      readFileSync(join(TMP_DIR, 'logs', newFile), 'utf8'));
+      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
 
     const heartbeatEntry = celContent.log[1];
     expect(heartbeatEntry).to.have.property('proof');
