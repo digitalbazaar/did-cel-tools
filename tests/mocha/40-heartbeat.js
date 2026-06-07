@@ -5,11 +5,16 @@ import {
   listCelFiles, runDidcel, TMP_DIR
 } from './helpers.js';
 import chai from 'chai';
+import {gunzipSync} from 'node:zlib';
 import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
-import {gunzipSync} from 'node:zlib';
 
 const {expect} = chai;
+
+function readCel(filename) {
+  return JSON.parse(
+    gunzipSync(readFileSync(join(TMP_DIR, 'logs', filename))).toString('utf8'));
+}
 
 const HB_COMMANDS = [
   'create', 'witness', 'heartbeat', 'witness', 'save', 'quit'
@@ -42,8 +47,7 @@ describe('heartbeat', function() {
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = JSON.parse(
-      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+    const celContent = readCel(newFile);
 
     expect(celContent).to.have.property('log');
     expect(celContent.log).to.have.length(2);
@@ -54,8 +58,7 @@ describe('heartbeat', function() {
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = JSON.parse(
-      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+    const celContent = readCel(newFile);
 
     const heartbeatEntry = celContent.log[1];
     expect(heartbeatEntry.event.operation).to.have.property(
@@ -69,8 +72,7 @@ describe('heartbeat', function() {
 
       expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-      const celContent = JSON.parse(
-        gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+      const celContent = readCel(newFile);
 
       const heartbeatEntry = celContent.log[1];
       expect(heartbeatEntry.event).to.have.property('previousEventHash');
@@ -82,8 +84,7 @@ describe('heartbeat', function() {
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = JSON.parse(
-      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+    const celContent = readCel(newFile);
 
     const heartbeatEntry = celContent.log[1];
     expect(heartbeatEntry).to.have.property('proof');

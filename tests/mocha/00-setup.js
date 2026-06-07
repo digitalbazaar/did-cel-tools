@@ -1,10 +1,10 @@
 /*!
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
-import {CONFIG_PATH, TMP_DIR, clearTmpDir} from './helpers.js';
-import {TEST_WITNESSES, start, stop} from './mock-witness.js';
-import {writeFileSync} from 'node:fs';
+import {clearTmpDir, CONFIG_PATH, TMP_DIR} from './helpers.js';
+import {start, stop, TEST_WITNESSES} from './mock-witness.js';
 import {join} from 'node:path';
+import {writeFileSync} from 'node:fs';
 import yaml from 'js-yaml';
 
 before(async () => {

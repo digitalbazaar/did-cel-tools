@@ -5,11 +5,16 @@ import {
   listCelFiles, runDidcel, TMP_DIR
 } from './helpers.js';
 import chai from 'chai';
+import {gunzipSync} from 'node:zlib';
 import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
-import {gunzipSync} from 'node:zlib';
 
 const {expect} = chai;
+
+function readCel(filename) {
+  return JSON.parse(
+    gunzipSync(readFileSync(join(TMP_DIR, 'logs', filename))).toString('utf8'));
+}
 
 const DEACTIVATE_COMMANDS = [
   'create', 'witness',
@@ -49,8 +54,7 @@ describe('deactivate', function() {
 
       expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-      const celContent = JSON.parse(
-        gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+      const celContent = readCel(newFile);
 
       expect(celContent).to.have.property('log');
       expect(celContent.log).to.have.length(3);
@@ -61,8 +65,7 @@ describe('deactivate', function() {
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = JSON.parse(
-      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+    const celContent = readCel(newFile);
 
     const deactivateEntry = celContent.log[2];
     expect(deactivateEntry.event.operation).to.have.property(
@@ -75,8 +78,7 @@ describe('deactivate', function() {
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = JSON.parse(
-      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+    const celContent = readCel(newFile);
 
     for(let i = 1; i < celContent.log.length; i++) {
       const entry = celContent.log[i];
@@ -90,8 +92,7 @@ describe('deactivate', function() {
 
     expect(exitCode, `stderr: ${stderr}`).to.equal(0);
 
-    const celContent = JSON.parse(
-      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+    const celContent = readCel(newFile);
 
     for(const entry of celContent.log) {
       expect(entry).to.have.property('proof');

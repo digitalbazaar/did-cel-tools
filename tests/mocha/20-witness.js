@@ -5,11 +5,16 @@ import {
   listCelFiles, listSecretFiles, runDidcel, TMP_DIR
 } from './helpers.js';
 import chai from 'chai';
+import {gunzipSync} from 'node:zlib';
 import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
-import {gunzipSync} from 'node:zlib';
 
 const {expect} = chai;
+
+function readCel(filename) {
+  return JSON.parse(
+    gunzipSync(readFileSync(join(TMP_DIR, 'logs', filename))).toString('utf8'));
+}
 
 describe('witness', function() {
   this.timeout(60000);
@@ -42,8 +47,7 @@ describe('witness', function() {
 
       const after = listCelFiles();
       const newFile = after.find(f => !before.includes(f));
-      const celContent = JSON.parse(
-        gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+      const celContent = readCel(newFile);
 
       expect(celContent).to.have.property('log');
       expect(celContent.log).to.have.length(1);
@@ -69,8 +73,7 @@ describe('witness', function() {
 
     const after = listCelFiles();
     const newFile = after.find(f => !before.includes(f));
-    const celContent = JSON.parse(
-      gunzipSync(readFileSync(join(TMP_DIR, 'logs', newFile))).toString('utf8'));
+    const celContent = readCel(newFile);
 
     const proof = celContent.log[0].proof[0];
     // verificationMethod should reference a real did:key (not a placeholder)
