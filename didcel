@@ -259,8 +259,8 @@ async function repl({commands, password}) {
       }
     });
 
-  // signs an event with the current assertionMethod key and appends it to
-  // the CEL; previousEventHash is set before signing so it is covered by proof
+  // computes previousEventHash from the last CEL entry, creates a signed event
+  // with that hash (so it is covered by the proof), and appends it to the CEL
   async function _appendEvent({type, data}) {
     const previousEventHash =
       await getPreviousEventHash({cel: cryptographicEventLog});
@@ -274,8 +274,8 @@ async function repl({commands, password}) {
   }
 
   // command: update
-  // appends a signed update event to the CEL with the current DID document
-  // state. hash-linked to the previous event. Run 'witness' afterward.
+  // creates a signed update event containing the current DID document and
+  // appends it to the CEL, hash-linked via previousEventHash. Run 'witness'.
   repl.command('update')
     .description('Update the cryptographic event log with the latest DID doc')
     .action(async () => {
@@ -301,11 +301,10 @@ async function repl({commands, password}) {
     });
 
   // command: witness
-  // generates cryptographic proofs from external witnesses that attest to the
-  // validity of the most recent event in the CEL. By default, three witnesses
-  // (red, green, and blue) each independently sign the event, providing
-  // decentralized attestation. This is a key feature of the CEL architecture
-  // that prevents single points of failure and enables auditability.
+  // sends a SHA3-256 digest of the most recent CEL event to each configured
+  // witness service. Witnesses are blind — they never see the DID document,
+  // only the hash — and each returns a DataIntegrityProof that is attached to
+  // the log entry, providing temporal anchoring and distributed attestation.
   repl.command('witness')
     .description(
       'Witness the latest set of updates to the DID document.')
@@ -317,11 +316,10 @@ async function repl({commands, password}) {
     });
 
   // command: save
-  // persists the Cryptographic Event Log to a file. The CEL contains the
-  // complete history of all operations on the DID document, including create
-  // and update events, along with witness attestations. The file is saved in
-  // JSON format with keys ordered for readability (e.g., @context, id, type
-  // first). This file can later be loaded to reconstruct the DID's history.
+  // persists the CEL to a gzip-compressed JSON file in config.logs, named
+  // by the DID identifier (e.g. z1abc....cel.gz). Also encrypts and saves
+  // all secret keys to config.secrets. Optionally writes to an explicit
+  // filename as well. CEL files can later be loaded to reconstruct history.
   repl.command('save')
     .description(
       'Saves the current DID to a cryptographic event log.')
@@ -351,28 +349,23 @@ async function repl({commands, password}) {
     });
 
   // command: quit
-  // exits the REPL without saving. Any unsaved changes to the DID document
-  // or CEL will be lost. Make sure to run 'save' before quitting if you want
-  // to persist your work.
+  // exits the REPL. Unsaved changes to the DID document or CEL will be lost.
+  // Run 'save' before quitting to persist secret keys and the event log.
   repl.command('quit')
     .description('Exit without saving the cryptographic event log.')
     .action(async () => {
       process.exit(0);
     });
 
-  // batch command execution mode
-  // if commands were provided via the -c flag, execute them sequentially
-  // before entering interactive mode. This allows for scripting common
-  // operations, e.g., ./didcel -c "create" "add assertionMethod ecdsa" "update"
-  // each command is parsed and executed, with errors suppressed to allow
-  // remaining commands to run.
+  // batch command execution mode: if commands were provided via the -c flag,
+  // execute them sequentially. Commander.js errors (unknown command, bad args)
+  // are suppressed so remaining commands still run; other errors propagate.
   if(commands && commands.length > 0) {
     for(const cmdLine of commands) {
       const args = cmdLine.split(' ');
       const command = args[0];
       try {
-        // parse command arguments and execute
-        // the command is duplicated in the array for Commander.js parsing
+        // prepend two dummy argv entries so Commander.js sees the right offset
         const commanderArgs = [command, command].concat(args);
         await repl.parseAsync(commanderArgs);
       } catch(err) {
