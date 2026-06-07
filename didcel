@@ -24,16 +24,15 @@
  *   quit     - Exit the REPL.
  */
 
+import {
+  addEvent, addVm, create, createEvent, createJsonldPrettyPrinter,
+  deleteObjectByIdSuffix, getObjectByIdSuffix, getPreviousEventHash,
+  loadFromFile, loadSecrets, saveSecrets, saveToFile, witness
+} from 'didcel';
 import {Argument, Command, CommanderError} from 'commander';
 import {config, loadConfig} from './lib/config.js';
-import {
-  addEvent, createCel, getPreviousEventHash, loadFromFile, saveToFile, witness,
-  addVm, create, createEvent,
-  loadSecrets, saveSecrets,
-  createJsonldPrettyPrinter, deleteObjectByIdSuffix, getObjectByIdSuffix
-} from 'didcel';
-import {mkdirSync} from 'fs';
 import {join} from 'node:path';
+import {mkdirSync} from 'fs';
 import promptSync from 'prompt-sync';
 
 // create the CLI and parse command-line options
