@@ -51,7 +51,9 @@ describe('heartbeat', function() {
     const heartbeatEntry = celContent.log[1];
     expect(heartbeatEntry.event.operation).to.have.property(
       'type', 'heartbeat');
-    expect(heartbeatEntry.event.operation.data).to.be.undefined;
+    expect(heartbeatEntry.event.operation.data).to.have.property('heartbeat');
+    expect(heartbeatEntry.event.operation.data.heartbeat).to.be.an('array');
+    expect(heartbeatEntry.event.operation.data.heartbeat[0]).to.match(/^z/);
   });
 
   it('should hash-link heartbeat event to the witnessed create event',

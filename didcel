@@ -25,9 +25,10 @@
  */
 
 import {
-  addEvent, addVm, create, createEvent, createJsonldPrettyPrinter,
+  addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
   deleteObjectByIdSuffix, getObjectByIdSuffix, getPreviousEventHash,
-  loadFromFile, loadSecrets, saveSecrets, saveToFile, witness
+  loadFromFile, loadSecrets, prettyPrintCel, saveSecrets, saveToFile,
+  sha3256Multibase, witness
 } from 'didcel';
 import {Argument, Command, CommanderError} from 'commander';
 import {config, loadConfig} from './lib/config.js';
@@ -46,13 +47,6 @@ program
 const options = program.opts();
 
 loadConfig({configPath: options.config});
-
-// create the JSON-LD pretty printer for formatted output
-// orders keys with @context, id, type first, then alphabetically
-const jsonldPretty = createJsonldPrettyPrinter({
-  preferOrder: ['@context', '@id', '@type', 'id', 'type', 'cryptosuite',
-    'heartbeatFrequency', 'previousEventHash']
-});
 
 // common verification relationship and service properties in DID documents
 const COMMON_PROPERTIES = [
@@ -85,7 +79,7 @@ async function repl({commands, password}) {
   let cryptographicEventLog;
   // the current DID document
   let didDocument;
-  // secret keys organized by verification relationship
+  // secret keys organized by verification relationship; heartbeat is a Buffer
   const secretKeys = {
     authentication: [],
     assertionMethod: [],
@@ -93,6 +87,8 @@ async function repl({commands, password}) {
     capabilityDelegation: [],
     keyAgreement: []
   };
+  // index of the next heartbeat key to use for signing (0-based)
+  let heartbeatKeyIndex = 0;
 
   // configure the Commander.js REPL with custom error handling
   repl.name('command')
@@ -113,12 +109,14 @@ async function repl({commands, password}) {
       try {
         const result = await loadFromFile({filename});
         if(result.valid) {
-          didDocument = result.didDocument;
+          // clone to decouple the session document from the CEL's entries
+          didDocument = structuredClone(result.didDocument);
           cryptographicEventLog = result.cel;
           const didIdentifier = didDocument.id.split(':').pop();
           const loaded = await loadSecrets(
             {didIdentifier, password, secretsDir: config.secrets});
           Object.assign(secretKeys, loaded);
+          heartbeatKeyIndex = result.cel.log.length - 1;
           const {log} = result.cel;
           console.log(
             `load: valid CEL with ${log.length} event(s): ${didDocument.id}`);
@@ -133,17 +131,18 @@ async function repl({commands, password}) {
     });
 
   // command: create
-  // creates a new DID document with an initial assertionMethod key
+  // creates a new self-certifying DID document with a heartbeat commitment.
+  // no assertionMethod key is generated at creation time; use 'add' afterwards.
   repl.command('create')
     .description('Create a new DID document')
     .action(async () => {
-      // generate a new DID document with P-256 elliptic curve key
-      const result = await create({curve: 'P-256'});
-      didDocument = result.didDocument;
-      // store the secret key for future signing operations
-      secretKeys.assertionMethod = [result.keyPair];
-      // use the CEL returned directly by create()
+      const result = await create();
+      // clone to decouple the session document from the CEL's create entry
+      didDocument = structuredClone(result.didDocument);
+      // store the heartbeat master secret for deriving per-event signing keys
+      secretKeys.heartbeat = result.heartbeatSecret;
       cryptographicEventLog = result.cryptographicEventLog;
+      heartbeatKeyIndex = 0;
       console.log(`create successful: ${didDocument.id}`);
     });
 
@@ -182,7 +181,7 @@ async function repl({commands, password}) {
       if(suffix) {
         const value = getObjectByIdSuffix({didDocument, suffix});
         if(value) {
-          console.log(JSON.stringify(value, jsonldPretty, 2));
+          console.log(prettyPrintCel(value));
           return;
         }
       }
@@ -259,18 +258,38 @@ async function repl({commands, password}) {
       }
     });
 
-  // computes previousEventHash from the last CEL entry, creates a signed event
-  // with that hash (so it is covered by the proof), and appends it to the CEL
+  // derives the current heartbeat signing key, rotates the heartbeat commitment
+  // in the event data, creates a signed event hash-linked via previousEventHash,
+  // and appends it to the CEL. deactivate events skip heartbeat rotation.
+  //
+  // eventData is always a fresh clone so that mutations to didDocument after
+  // this call cannot retroactively corrupt the committed event payload.
   async function _appendEvent({type, data}) {
-    const previousEventHash =
-      await getPreviousEventHash({cel: cryptographicEventLog});
-    const {event} = await createEvent({
-      type, data,
-      assertionMethod: secretKeys.assertionMethod[0],
-      previousEventHash
-    });
-    cryptographicEventLog =
-      await addEvent({cel: cryptographicEventLog, event});
+    const previousEventHash = getPreviousEventHash({cel: cryptographicEventLog});
+    const signingKeyPair = await deriveHeartbeatKeyPair(
+      secretKeys.heartbeat, heartbeatKeyIndex);
+    let eventData = data;
+    if(type !== 'deactivate') {
+      const nextKeyPair = await deriveHeartbeatKeyPair(
+        secretKeys.heartbeat, heartbeatKeyIndex + 1);
+      const nextHash = sha3256Multibase(nextKeyPair.id);
+      if(type === 'update') {
+        // clone before mutating so the CEL's prior events are not affected
+        eventData = structuredClone(data);
+        eventData.heartbeat = [nextHash];
+        // update the session DID document to match committed state
+        didDocument.heartbeat = [nextHash];
+      } else if(type === 'heartbeat') {
+        eventData = {heartbeat: [nextHash]};
+        didDocument.heartbeat = [nextHash];
+      }
+    }
+    const event = await createEvent({
+      type, data: eventData, signingKeyPair, previousEventHash});
+    cryptographicEventLog = await addEvent({cel: cryptographicEventLog, event});
+    if(type !== 'deactivate') {
+      heartbeatKeyIndex++;
+    }
   }
 
   // command: update

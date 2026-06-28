@@ -2,12 +2,100 @@
  * Copyright (c) 2024-2026 Digital Bazaar, Inc.
  */
 
-// Re-export start/stop from the didcel library's mock witness server.
-// start() spins up an in-process HTTP witness and pushes its URL into
-// TEST_WITNESSES.  stop() shuts the server down after the suite finishes.
-export {start, stop} from 'didcel/tests/mocha/mock-witness.js';
+/**
+ * Minimal mock HTTP server implementing the did:cel blind-witness endpoint.
+ * Accepts POST {digestMultibase} and returns {proof: DataIntegrityProof}.
+ *
+ * VerifyData = SHA256(JCS(proofOptions)) || rawHash, where rawHash is the
+ * 32-byte SHA3-256 digest extracted from the received multihash. This matches
+ * exactly what `_verifyWitnessProof()` in cel.js reconstructs.
+ */
+import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
+import {base58btc} from 'multiformats/bases/base58';
+import canonicalize from 'canonicalize';
+import crypto from 'node:crypto';
+import http from 'node:http';
 
-// TEST_WITNESSES is the shared mutable array that start() populates.
-// Because Node.js caches ES module instances, the array that mock-witness.js
-// writes into is the same object we read here.
-export {TEST_WITNESSES} from 'didcel/tests/mocha/helpers.js';
+// SHA3-256 multihash header is 2 bytes: [0x16, 0x20]
+const MULTIHASH_HEADER_LENGTH = 2;
+
+// populated by start(); consumed by 00-setup.js to configure the CLI
+export const TEST_WITNESSES = [];
+
+let _server = null;
+let _keyPair = null;
+let _verificationMethod = null;
+
+export async function start() {
+  _keyPair = await EcdsaMultikey.generate({curve: 'P-256'});
+  const exported =
+    await _keyPair.export({publicKey: true, includeContext: false});
+  const {publicKeyMultibase} = exported;
+  const didKeyId = `did:key:${publicKeyMultibase}`;
+  _verificationMethod = `${didKeyId}#${publicKeyMultibase}`;
+
+  _server = http.createServer(_handleRequest);
+  await new Promise(resolve => _server.listen(0, '127.0.0.1', resolve));
+
+  const {port} = _server.address();
+  TEST_WITNESSES.push(`http://127.0.0.1:${port}/witness`);
+}
+
+export function stop() {
+  return new Promise(resolve => {
+    if(_server) {
+      _server.close(resolve);
+      _server = null;
+    } else {
+      resolve();
+    }
+  });
+}
+
+async function _handleRequest(req, res) {
+  if(req.method !== 'POST') {
+    res.writeHead(405);
+    res.end();
+    return;
+  }
+
+  try {
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const {digestMultibase} = JSON.parse(Buffer.concat(chunks).toString());
+
+    // strip the 2-byte multihash header to get the raw 32-byte digest
+    const mhBytes = base58btc.decode(digestMultibase);
+    const rawHash = mhBytes.slice(MULTIHASH_HEADER_LENGTH);
+
+    const proofOptions = {
+      '@context': 'https://w3id.org/security/data-integrity/v2',
+      created: new Date().toISOString(),
+      cryptosuite: 'ecdsa-jcs-2019',
+      proofPurpose: 'assertionMethod',
+      type: 'DataIntegrityProof',
+      verificationMethod: _verificationMethod
+    };
+
+    // verifyData = SHA256(JCS(proofOptions)) || rawHash
+    const c14nProof = canonicalize(proofOptions);
+    const proofHash = new Uint8Array(
+      crypto.createHash('sha256').update(c14nProof).digest());
+    const verifyData = new Uint8Array(proofHash.length + rawHash.length);
+    verifyData.set(proofHash, 0);
+    verifyData.set(rawHash, proofHash.length);
+
+    const signer = _keyPair.signer();
+    const signatureBytes = await signer.sign({data: verifyData});
+    const proofValue = base58btc.encode(signatureBytes);
+
+    const proof = {...proofOptions, proofValue};
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    res.end(JSON.stringify({proof}));
+  } catch(e) {
+    res.writeHead(500);
+    res.end(JSON.stringify({error: e.message}));
+  }
+}
