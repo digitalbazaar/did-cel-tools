@@ -34,6 +34,14 @@ logs: ~/.config/didcel/logs
 
 # directory where encrypted secret key files are written by the save command
 secrets: ~/.config/didcel/secrets
+
+# witnesses whose proofs are accepted when resolving a did:cel from a
+# storage service using the resolve command; validFrom/validUntil bound the
+# time range during which each witness is recognized (both are optional)
+recognizedWitnesses:
+  - id: did:key:zDnaexgKWoejkbWirXnT2FXk3d4QnbGqbowq12jia8TEid5Qd
+    validFrom: 2025-01-01T00:00:00Z
+    validUntil: 2026-12-31T23:59:59Z
 ```
 
 ## Usage
@@ -47,7 +55,8 @@ To start the interactive REPL:
 ```
 
 You will be prompted for an encryption password used to protect secret keys on
-disk. Pass `-p <password>` to supply it non-interactively.
+disk; the password is asked for twice and re-prompted until both entries
+match. Pass `-p <password>` to supply it non-interactively.
 
 ### Non-Interactive (Batch) Mode
 
@@ -263,7 +272,7 @@ Obtains cryptographic attestations from witness services for the latest event.
 did:cel> witness
 ```
 
-**Description:** Sends a SHA3-256 digest of the most recent event in the Cryptographic Event Log to each configured witness service. Witnesses are *blind* — they never see the DID document, only the hash — and each returns a DataIntegrityProof (ecdsa-jcs-2019) that is attached to the log entry.
+**Description:** Sends a SHA2-256 digest of the most recent event in the Cryptographic Event Log to each configured witness service. Witnesses are *blind* — they never see the DID document, only the hash — and each returns a DataIntegrityProof (ecdsa-jcs-2019) that is attached to the log entry.
 
 These witness attestations provide:
 - **Temporal anchoring:** Proof of when the event was witnessed
@@ -291,6 +300,25 @@ did:cel> load <filename>
 **Description:** Reads a gzip-compressed CEL file, fully validates the event chain (DID self-certification, hash chain, operation proofs, and trusted witness proofs if configured), and restores the current DID document and session state. Also loads the corresponding encrypted secret keys from `config.secrets` so subsequent commands can sign new events.
 
 **Output:** `load: valid CEL with N event(s): did:cel:z...` or one or more `error:` lines describing validation failures.
+
+---
+
+### `resolve <did>`
+
+Resolves a did:cel identifier from a storage service and loads it read-only.
+
+**Usage:**
+```
+did:cel> resolve did:cel:zW1...
+Storage URL (ending in "/"): https://storage.example/dids/
+```
+
+**Parameters:**
+- `<did>`: The `did:cel` identifier to resolve.
+
+**Description:** Prompts for a storage URL (which must end in a `/`), fetches `<storage-url><did>.cel.gz`, decompresses and fully validates the Cryptographic Event Log — accepting witness proofs only from the `recognizedWitnesses` configured in `config.yaml` — and verifies that the returned DID matches the requested one. The resolved DID document is then loaded into the session in **read-only mode**: commands that modify the DID document or write it to disk (`add`, `remove`, `expire`, `update`, `heartbeat`, `deactivate`, `witness`, and `save`) are disabled so the resolved DID cannot be altered or saved by accident. No secret keys are loaded. Use `load` or `create` to return to a writable session.
+
+**Output:** `resolve: valid CEL with N event(s): did:cel:z... (read-only)` or one or more `error:` lines describing fetch or validation failures.
 
 ---
 
@@ -377,7 +405,7 @@ The DID CEL tools implement the `did:cel` DID method, which consists of:
 
 - **Self-certifying identifiers:** DID identifiers derived from `did:cel:` + base58btc(SHA3-256(JCS(initial-DID-document-without-id)))
 - **Cryptographic Event Log (CEL):** A hash-linked chain of events recording all DID operations, stored as gzip-compressed JSON
-- **Blind witness attestations:** Witness services receive only a SHA3-256 digest of each event and return DataIntegrityProofs, providing temporal anchoring and distributed trust without ever seeing DID document contents
+- **Blind witness attestations:** Witness services receive only a SHA2-256 digest of each event and return DataIntegrityProofs, providing temporal anchoring and distributed trust without ever seeing DID document contents
 - **Data Integrity Proofs:** ecdsa-jcs-2019 cryptographic signatures on events (operation proofs) and on witness attestations (witness proofs)
 - **Heartbeat keys:** Each DID document stores SHA3-256 hashes of heartbeat `did:key:` URIs derived from a master secret via HKDF-SHA256; each signed event rotates the hash to the next derived key, preventing key reuse
 
@@ -389,7 +417,7 @@ The DID CEL tools implement the `did:cel` DID method, which consists of:
 ## Security Considerations
 
 - **Secret Keys:** Secret keys are stored in memory during the session and encrypted to disk when you run `save`. Keys use AES-256-GCM with scrypt key derivation.
-- **Blind Witnesses:** Witness services never see the DID document — they only sign a SHA3-256 hash of the event. This prevents witnesses from learning private information about DID controllers.
+- **Blind Witnesses:** Witness services never see the DID document — they only sign a SHA2-256 hash of the event. This prevents witnesses from learning private information about DID controllers.
 - **File Storage:** CEL files (`.cel.gz`) contain only public information (DID documents and proofs), not secret keys. Secret keys are stored separately in encrypted YAML files.
 - **Heartbeat Keys:** Heartbeat key hashes are stored in the DID document. Each signed event must include the next heartbeat key's hash, rotating the commitment forward and preventing key reuse or replay attacks.
 

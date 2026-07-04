@@ -21,17 +21,19 @@
  *   update   - Update the cryptographic event log
  *   witness  - Generate witness proofs
  *   save     - Save CEL to file
+ *   resolve  - Resolve a did:cel from a storage service (read-only)
  *   quit     - Exit the REPL.
  */
 
 import {
   addEvent, addVm, create, createEvent, deriveHeartbeatKeyPair,
   deleteObjectByIdSuffix, getObjectByIdSuffix, getPreviousEventHash,
-  loadFromFile, loadSecrets, prettyPrintCel, saveSecrets, saveToFile,
+  loadFromFile, loadSecrets, prettyPrintCel, read, saveSecrets, saveToFile,
   sha3256Multibase, witness
 } from 'didcel';
 import {Argument, Command, CommanderError} from 'commander';
 import {config, loadConfig} from './lib/config.js';
+import {gunzipSync} from 'node:zlib';
 import {join} from 'node:path';
 import {mkdirSync} from 'fs';
 import promptSync from 'prompt-sync';
@@ -69,9 +71,18 @@ async function repl({commands, password}) {
   const prompt = promptSync();
   const repl = new Command();
 
-  // prompt for encryption password if not provided via -p
-  if(!password) {
-    password = prompt('Encryption password: ', {echo: ''});
+  // prompt for encryption password if not provided via -p; ask twice and
+  // re-prompt until both entries match
+  if(password === undefined) {
+    while(true) {
+      const first = prompt('Encryption password: ', {echo: ''});
+      const second = prompt('Re-enter encryption password: ', {echo: ''});
+      if(first === second) {
+        password = first;
+        break;
+      }
+      console.log('Passwords do not match; please try again.');
+    }
   }
 
   // session state variables
@@ -89,6 +100,20 @@ async function repl({commands, password}) {
   };
   // index of the next heartbeat key to use for signing (0-based)
   let heartbeatKeyIndex = 0;
+  // true when the session DID was resolved from a storage service; blocks
+  // all commands that modify the DID document or write it to disk
+  let readOnly = false;
+
+  // logs an error and returns false when the session is read-only
+  function _assertWritable(commandName) {
+    if(readOnly) {
+      console.log(
+        `error: ${commandName} is disabled - the current DID was resolved ` +
+        'in read-only mode.');
+      return false;
+    }
+    return true;
+  }
 
   // configure the Commander.js REPL with custom error handling
   repl.name('command')
@@ -112,6 +137,7 @@ async function repl({commands, password}) {
           // clone to decouple the session document from the CEL's entries
           didDocument = structuredClone(result.didDocument);
           cryptographicEventLog = result.cel;
+          readOnly = false;
           const didIdentifier = didDocument.id.split(':').pop();
           const loaded = await loadSecrets(
             {didIdentifier, password, secretsDir: config.secrets});
@@ -130,6 +156,68 @@ async function repl({commands, password}) {
       }
     });
 
+  // command: resolve
+  // resolves a did:cel identifier from a storage service. Prompts for the
+  // storage URL, fetches `<storageUrl><did>.cel.gz`, validates the CEL
+  // against the recognized witnesses in config.yaml, and loads the resolved
+  // DID document into the session in read-only mode so it cannot be
+  // modified or written to disk by accident.
+  repl.command('resolve')
+    .description(
+      'Resolve a did:cel identifier from a storage service (read-only).')
+    .argument('<did>', 'the did:cel identifier to resolve')
+    .action(async did => {
+      try {
+        if(!did.startsWith('did:cel:')) {
+          console.log('error: identifier must start with "did:cel:".');
+          return;
+        }
+        const storageUrl = prompt('Storage URL (ending in "/"): ').trim();
+        if(!storageUrl.endsWith('/')) {
+          console.log('error: the storage URL must end in a "/" character.');
+          return;
+        }
+        const celUrl = `${storageUrl}${did}.cel.gz`;
+        console.log(`resolve: fetching ${celUrl}`);
+        const response = await fetch(celUrl);
+        if(!response.ok) {
+          console.log(
+            `error: failed to fetch CEL (HTTP ${response.status}).`);
+          return;
+        }
+        const compressed = Buffer.from(await response.arrayBuffer());
+        const cel = JSON.parse(gunzipSync(compressed).toString('utf8'));
+
+        // validate the CEL, only accepting proofs from recognized witnesses
+        const recognizedWitnesses = config.recognizedWitnesses ?? [];
+        const result = await read({cel, recognizedWitnesses});
+        if(!result.valid) {
+          for(const err of result.errors) {
+            console.log(`error: ${err}`);
+          }
+          return;
+        }
+        // ensure the storage service returned the requested DID
+        if(result.didDocument.id !== did) {
+          console.log(
+            `error: storage service returned "${result.didDocument.id}" ` +
+            `instead of the requested "${did}".`);
+          return;
+        }
+
+        // load into the session in read-only mode; no secret keys are
+        // loaded because the resolved DID is not controlled by this session
+        didDocument = structuredClone(result.didDocument);
+        cryptographicEventLog = result.cel;
+        readOnly = true;
+        console.log(
+          `resolve: valid CEL with ${result.cel.log.length} event(s): ` +
+          `${didDocument.id} (read-only)`);
+      } catch(err) {
+        console.log(`error: ${err.message}`);
+      }
+    });
+
   // command: create
   // creates a new self-certifying DID document with a heartbeat commitment.
   // no assertionMethod key is generated at creation time; use 'add' afterwards.
@@ -143,6 +231,7 @@ async function repl({commands, password}) {
       secretKeys.heartbeat = result.heartbeatSecret;
       cryptographicEventLog = result.cryptographicEventLog;
       heartbeatKeyIndex = 0;
+      readOnly = false;
       console.log(`create successful: ${didDocument.id}`);
     });
 
@@ -155,6 +244,9 @@ async function repl({commands, password}) {
     .addArgument(new Argument('<type>', 'the type of property to add')
       .choices(['eddsa', 'ecdsa', 'bbs', 'FileService']))
     .action(async (property, type) => {
+      if(!_assertWritable('add')) {
+        return;
+      }
       // TODO: Currently only ECDSA verification methods are supported
       if(property !== 'service' && type === 'ecdsa') {
         // generate a new verification method for the specified relationship
@@ -187,24 +279,35 @@ async function repl({commands, password}) {
       }
 
       // if no suffix provided, display a summary of the DID document
-      for(const property of Object.keys(didDocument)) {
-        let numEntries = 0;
-        // only process array properties (verification relationships, services)
-        if(!Array.isArray(didDocument[property])) {
+      for(const [property, value] of Object.entries(didDocument)) {
+        if(property === 'id') {
           continue;
         }
-        let propertyListing = `  ${property}: `;
-        // show abbreviated identifiers for each entry
-        for(const entry of didDocument[property]) {
-          if(typeof entry !== 'object') {
-            continue;
+        // scalar string properties (e.g. heartbeatFrequency)
+        if(!Array.isArray(value)) {
+          if(typeof value === 'string') {
+            console.log(`  ${property}: ${value}`);
           }
-          // display first 4 and last 4 characters of identifier
-          const lastFourOfId =
-            entry.id.slice(entry.id.length - 4, entry.id.length);
-          propertyListing += entry.type +
-              entry.id.slice(0, 4) + '...' + lastFourOfId + ' ';
-          numEntries++;
+          continue;
+        }
+        // array properties: string entries (e.g. @context, heartbeat) are
+        // shown as-is; object entries (verification methods, services) are
+        // shown as abbreviated type + identifier
+        let numEntries = 0;
+        let propertyListing = `  ${property}: `;
+        for(const entry of value) {
+          if(typeof entry === 'string') {
+            propertyListing += entry + ' ';
+            numEntries++;
+          } else if(typeof entry === 'object' && entry !== null) {
+            // display first 4 and last 4 characters of identifier, when
+            // present (e.g. service entries may not have an id)
+            const id = entry.id ?? '';
+            const abbreviatedId =
+              id ? id.slice(0, 4) + '...' + id.slice(-4) : '';
+            propertyListing += (entry.type ?? '') + abbreviatedId + ' ';
+            numEntries++;
+          }
         }
         if(numEntries > 0) {
           console.log(propertyListing);
@@ -219,6 +322,9 @@ async function repl({commands, password}) {
     .addArgument(new Argument('<suffix>',
       'the last several characters of the identifier to expire'))
     .action(async suffix => {
+      if(!_assertWritable('expire')) {
+        return;
+      }
       if(suffix) {
         const value = getObjectByIdSuffix({didDocument, suffix});
         if(value) {
@@ -247,6 +353,9 @@ async function repl({commands, password}) {
     .addArgument(new Argument('<suffix>',
       'the last several characters of the identifier to remove'))
     .action(async suffix => {
+      if(!_assertWritable('remove')) {
+        return;
+      }
       if(suffix) {
         // search for and delete the object matching the ID suffix
         const value = deleteObjectByIdSuffix({didDocument, suffix});
@@ -298,6 +407,9 @@ async function repl({commands, password}) {
   repl.command('update')
     .description('Update the cryptographic event log with the latest DID doc')
     .action(async () => {
+      if(!_assertWritable('update')) {
+        return;
+      }
       await _appendEvent({type: 'update', data: didDocument});
     });
 
@@ -306,6 +418,9 @@ async function repl({commands, password}) {
   repl.command('heartbeat')
     .description('Update the cryptographic event log with a heartbeat')
     .action(async () => {
+      if(!_assertWritable('heartbeat')) {
+        return;
+      }
       await _appendEvent({type: 'heartbeat', data: undefined});
       console.log('heartbeat: generated');
     });
@@ -315,12 +430,15 @@ async function repl({commands, password}) {
   repl.command('deactivate')
     .description('Deactivate the DID')
     .action(async () => {
+      if(!_assertWritable('deactivate')) {
+        return;
+      }
       await _appendEvent({type: 'deactivate', data: undefined});
       console.log('deactivation: complete');
     });
 
   // command: witness
-  // sends a SHA3-256 digest of the most recent CEL event to each configured
+  // sends a SHA2-256 digest of the most recent CEL event to each configured
   // witness service. Witnesses are blind — they never see the DID document,
   // only the hash — and each returns a DataIntegrityProof that is attached to
   // the log entry, providing temporal anchoring and distributed attestation.
@@ -328,6 +446,9 @@ async function repl({commands, password}) {
     .description(
       'Witness the latest set of updates to the DID document.')
     .action(async () => {
+      if(!_assertWritable('witness')) {
+        return;
+      }
       // generate witness proofs for the most recent event in the log
       // each witness independently validates and signs the event
       await witness({cel: cryptographicEventLog, witnesses: config.witnesses});
@@ -344,6 +465,9 @@ async function repl({commands, password}) {
       'Saves the current DID to a cryptographic event log.')
     .argument('[filename]', 'the name of the file to save the event log to')
     .action(async filename => {
+      if(!_assertWritable('save')) {
+        return;
+      }
       const didIdentifier = didDocument.id.split(':').pop();
 
       // always write to configured logs directory using DID identifier
